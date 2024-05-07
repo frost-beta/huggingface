@@ -1,7 +1,7 @@
 {
   "name": "@frost-beta/huggingface",
   "version": "0.0.1-dev",
-  "description": "Download model files from HuggingFace",
+  "description": "A library and a CLI tool for accessing HuggingFace",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

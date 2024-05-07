@@ -1,6 +1,5 @@
 import path from 'node:path';
-import {createWriteStream} from 'node:fs';
-import fs from 'node:fs/promises';
+import {mkdirSync, createWriteStream} from 'node:fs';
 import {PassThrough} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 
@@ -27,7 +26,7 @@ export async function download(repo: string, dir: string, opts: DownloadOptions 
       formatValue: (value, _, type) => {
         // Return human friendly file sizes.
         if (type != 'value' && type != 'total')
-          return value;
+          return String(value);
         const options = {
           // Avoid jumping cursors around numbers like 1.9MB and 2MB.
           minimumFractionDigits: value > 1024 * 1024 ? 1 : 0,
@@ -53,13 +52,15 @@ async function downloadRepo(repo: string, dir: string, filters?: string[], bar?:
   // Create glob filter.
   const isMatch = filters?.length ? picomatch(filters) : null;
   // Get files list from hub.
-  const filepaths: string[] = [];
-  for await (const file of hub.listFiles({repo})) {
+  const files: hub.ListFileEntry[] = [];
+  for await (const file of hub.listFiles({repo, recursive: true})) {
     if (!isMatch || isMatch(file.path))
-      filepaths.push(file.path);
+      files.push(file);
   }
-  if (filepaths.length == 0)
+  if (files.length == 0)
     return;
+  // Sort the files by size and then get paths.
+  const filepaths = files.sort((a, b) => a.size - b.size).map(f => f.path);
   // Download all files, Throttle.all limits 5 downloads parallel.
   const tasks = alignNames(filepaths).map(([p, n]) => () => downloadFile(repo, p, n, dir, bar));
   await Throttle.all(tasks);
@@ -67,9 +68,10 @@ async function downloadRepo(repo: string, dir: string, filters?: string[], bar?:
 }
 
 async function downloadFile(repo: string, filepath: string, name: string, dir: string, bar?: MultiBar) {
-  // Make sure target dir is created.
+  // Make sure target dir is created. Use sync version otherwise the sequence
+  // of download will be messed.
   const target = path.join(dir, filepath);
-  await fs.mkdir(path.dirname(target), {recursive: true});
+  mkdirSync(path.dirname(target), {recursive: true});
   // Download file.
   const response = await hub.downloadFile({repo, path: filepath});
   if (!response) {

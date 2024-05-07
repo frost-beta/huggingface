@@ -43,7 +43,9 @@ export async function download(repo: string, dir: string, opts: DownloadOptions 
   const exitListener = () => bar?.stop();
   try {
     process.once('exit', exitListener);
-    return await downloadRepo(repo, dir, opts.filters, opts.parallel ?? 8, bar);
+    // Start downloading.
+    const parallel = Math.min(opts.parallel ?? 8, process.stdout.rows);
+    return await downloadRepo(repo, dir, opts.filters, parallel, bar);
   } finally {
     process.off('exit', exitListener);
   }
@@ -92,7 +94,7 @@ async function downloadFile(repo: string, filepath: string, name: string, dir: s
     } else {
       // Reuse finished bar, otherwise things will break when the number of bars
       // exceeds the screen height.
-      subbar = bars.find(b => !b.isActive);
+      subbar = bars.findLast(b => !b.isActive);
       subbar.start(size, 0);
     }
     progress.on('data', (chunk) => subbar.increment(chunk.length, {name}));
@@ -105,7 +107,8 @@ async function downloadFile(repo: string, filepath: string, name: string, dir: s
 // Make items in the list have the same length.
 function alignNames(names: string[]): [string, string][] {
   // Find the longest length.
-  const len = names.reduce((max, name) => Math.max(max, name.length), 0);
+  let len = names.reduce((max, name) => Math.max(max, name.length), 0);
+  len = Math.min(len, process.stdout.columns - 55);
   // Pad trailing spaces to names.
   return names.map(name => [name, name.padEnd(len, ' ')]);
 }

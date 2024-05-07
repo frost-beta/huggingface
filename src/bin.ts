@@ -8,6 +8,7 @@ export class DownloadCommand extends Command {
   static paths = [ [ 'download' ] ];
   static usage = Command.Usage({
     description: 'Download models or datasets from repository.',
+    details: 'For downloading datasets, put "datasets/" before the name, for example "datasets/wikitext"',
     examples: [
       [
         'Download all files to Llama3-ChatQA-1.5-8B dir',
@@ -16,6 +17,10 @@ export class DownloadCommand extends Command {
       [
         'Download only .json and .safetensors files to /tmp/weights',
         '$0 download --to /tmp/weights --filter=*.json --filter=*.safetensors nvidia/Llama3-ChatQA-1.5-8B',
+      ],
+      [
+        'Download datasets',
+        '$0 download datasets/wikitext',
       ],
     ]
   });
@@ -27,7 +32,7 @@ export class DownloadCommand extends Command {
 
   async execute() {
     const dir = this.dir ?? this.repo.split('/').pop();
-    await download(this.repo, dir, {
+    await download(this.repo, dir!, {
       showProgress: !this.silent,
       filters: this.filters,
     });

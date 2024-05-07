@@ -45,13 +45,13 @@ export async function download(repo: string, dir: string, opts: DownloadOptions 
     process.once('exit', exitListener);
     // Start downloading.
     const parallel = Math.min(opts.parallel ?? 8, process.stdout.rows);
-    return await downloadRepo(repo, dir, opts.filters, parallel, bar);
+    return await downloadRepo(repo, dir, parallel, opts.filters, bar);
   } finally {
     process.off('exit', exitListener);
   }
 }
 
-async function downloadRepo(repo: string, dir: string, filters?: string[], parallel: number, bar?: MultiBar) {
+async function downloadRepo(repo: string, dir: string, parallel: number, filters?: string[], bar?: MultiBar) {
   // Create glob filter.
   const isMatch = filters?.length ? picomatch(filters) : null;
   // Get files list from hub.
@@ -88,13 +88,13 @@ async function downloadFile(repo: string, filepath: string, name: string, dir: s
   if (bar) {
     const size = parseInt(response.headers.get('Content-Length')!);
     let subbar: SingleBar;
-    let bars = bar.bars as SingleBar[];
+    let bars = (bar as any).bars as SingleBar[];
     if (bars.length < parallel) {
       subbar = bar.create(size, 0);
     } else {
       // Reuse finished bar, otherwise things will break when the number of bars
       // exceeds the screen height.
-      subbar = bars.findLast(b => !b.isActive);
+      subbar = bars.findLast(b => !(b as any).isActive)!;
       subbar.start(size, 0);
     }
     progress.on('data', (chunk) => subbar.increment(chunk.length, {name}));

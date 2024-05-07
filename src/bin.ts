@@ -10,23 +10,27 @@ export class DownloadCommand extends Command {
     description: 'Download models or datasets from repository.',
     examples: [
       [
-        'Download all files to current dir',
+        'Download all files to Llama3-ChatQA-1.5-8B dir',
         '$0 download nvidia/Llama3-ChatQA-1.5-8B',
       ],
       [
-        'Download only .json and .safetensors files to /tmp',
-        '$0 download --to /tmp --filter=*.json --filter=*.safetensors nvidia/Llama3-ChatQA-1.5-8B',
+        'Download only .json and .safetensors files to /tmp/weights',
+        '$0 download --to /tmp/weights --filter=*.json --filter=*.safetensors nvidia/Llama3-ChatQA-1.5-8B',
       ],
     ]
   });
 
   repo = Option.String();
-  dir = Option.String('--to', process.cwd(), {description: 'Target directory to put downloaded files, default is current working dir'});
+  dir = Option.String('--to', {description: 'Target directory to put downloaded files, default is repo\'s name'});
   filters = Option.Array('--filter', {description: 'Only download files matching glob patterns'});
   silent = Option.Boolean('--silent', {description: 'Do not print progress bar'});
 
   async execute() {
-    await download(this.repo, this.dir, {showProgress: !this.silent, filters: this.filters});
+    const dir = this.dir ?? this.repo.split('/')[1];
+    await download(this.repo, dir, {
+      showProgress: !this.silent,
+      filters: this.filters,
+    });
   }
 }
 

@@ -5,6 +5,7 @@ import {PassThrough} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 
 import {MultiBar, Presets} from 'cli-progress';
+import Throttle from 'promise-parallel-throttle';
 import picomatch from 'picomatch';
 import prettyBytes from 'pretty-bytes';
 import * as hub from '@huggingface/hub';
@@ -25,10 +26,16 @@ export async function download(repo: string, dir: string, opts: DownloadOptions 
       format: '{bar} | {name} | {value}/{total}',
       formatValue: (value, _, type) => {
         // Return human friendly file sizes.
-        if (type == 'value' || type == 'total')
-          return prettyBytes(value, {maximumFractionDigits: 1, space: false});
-        else
-          return String(value);
+        if (type != 'value' && type != 'total')
+          return value;
+        const options = {
+          // Avoid jumping cursors around numbers like 1.9MB and 2MB.
+          minimumFractionDigits: value > 1024 * 1024 ? 1 : 0,
+          // Keep numbers compact.
+          maximumFractionDigits: 1,
+          space: false,
+        };
+        return prettyBytes(value, options);
       },
     }, Presets.shades_grey);
   }
@@ -53,9 +60,9 @@ async function downloadRepo(repo: string, dir: string, filters?: string[], bar?:
   }
   if (filepaths.length == 0)
     return;
-  // Download all files.
-  const tasks = alignNames(filepaths).map(([p, n]) => downloadFile(repo, p, n, dir, bar));
-  await Promise.all(tasks);
+  // Download all files, Throttle.all limits 5 downloads parallel.
+  const tasks = alignNames(filepaths).map(([p, n]) => () => downloadFile(repo, p, n, dir, bar));
+  await Throttle.all(tasks);
   bar?.stop();
 }
 

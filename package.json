@@ -31,6 +31,7 @@
     "cli-progress": "3.12.0",
     "clipanion": "4.0.0-rc.3",
     "picomatch": "4.0.2",
-    "pretty-bytes": "6.1.1"
+    "pretty-bytes": "6.1.1",
+    "promise-parallel-throttle": "3.4.1"
   }
 }

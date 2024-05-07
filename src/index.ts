@@ -3,7 +3,7 @@ import {mkdirSync, createWriteStream} from 'node:fs';
 import {PassThrough} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 
-import {MultiBar, Presets} from 'cli-progress';
+import {MultiBar, Presets, SingleBar} from 'cli-progress';
 import Throttle from 'promise-parallel-throttle';
 import picomatch from 'picomatch';
 import prettyBytes from 'pretty-bytes';
@@ -12,6 +12,7 @@ import * as hub from '@huggingface/hub';
 interface DownloadOptions {
   showProgress?: boolean;
   filters?: string[];
+  parallel?: number;
 };
 
 export async function download(repo: string, dir: string, opts: DownloadOptions = {}) {
@@ -42,13 +43,13 @@ export async function download(repo: string, dir: string, opts: DownloadOptions 
   const exitListener = () => bar?.stop();
   try {
     process.once('exit', exitListener);
-    return await downloadRepo(repo, dir, opts.filters, bar);
+    return await downloadRepo(repo, dir, opts.filters, opts.parallel ?? 8, bar);
   } finally {
     process.off('exit', exitListener);
   }
 }
 
-async function downloadRepo(repo: string, dir: string, filters?: string[], bar?: MultiBar) {
+async function downloadRepo(repo: string, dir: string, filters?: string[], parallel: number, bar?: MultiBar) {
   // Create glob filter.
   const isMatch = filters?.length ? picomatch(filters) : null;
   // Get files list from hub.
@@ -62,12 +63,14 @@ async function downloadRepo(repo: string, dir: string, filters?: string[], bar?:
   // Sort the files by size and then get paths.
   const filepaths = files.sort((a, b) => a.size - b.size).map(f => f.path);
   // Download all files, Throttle.all limits 5 downloads parallel.
-  const tasks = alignNames(filepaths).map(([p, n]) => () => downloadFile(repo, p, n, dir, bar));
-  await Throttle.all(tasks);
+  const tasks = alignNames(filepaths).map(([p, n]) => {
+    return () => downloadFile(repo, p, n, dir, parallel, bar);
+  });
+  await Throttle.all(tasks, {maxInProgress: parallel});
   bar?.stop();
 }
 
-async function downloadFile(repo: string, filepath: string, name: string, dir: string, bar?: MultiBar) {
+async function downloadFile(repo: string, filepath: string, name: string, dir: string, parallel: number, bar?: MultiBar) {
   // Make sure target dir is created. Use sync version otherwise the sequence
   // of download will be messed.
   const target = path.join(dir, filepath);
@@ -82,8 +85,18 @@ async function downloadFile(repo: string, filepath: string, name: string, dir: s
   const progress = new PassThrough();
   if (bar) {
     const size = parseInt(response.headers.get('Content-Length')!);
-    const subbar = bar.create(size, 0);
+    let subbar: SingleBar;
+    let bars = bar.bars as SingleBar[];
+    if (bars.length < parallel) {
+      subbar = bar.create(size, 0);
+    } else {
+      // Reuse finished bar, otherwise things will break when the number of bars
+      // exceeds the screen height.
+      subbar = bars.find(b => !b.isActive);
+      subbar.start(size, 0);
+    }
     progress.on('data', (chunk) => subbar.increment(chunk.length, {name}));
+    progress.on('end', () => subbar.stop());
   }
   // Write to disk and wait.
   await pipeline(response.body as any, progress, createWriteStream(target));

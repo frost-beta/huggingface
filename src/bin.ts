@@ -26,7 +26,7 @@ export class DownloadCommand extends Command {
   silent = Option.Boolean('--silent', {description: 'Do not print progress bar'});
 
   async execute() {
-    const dir = this.dir ?? this.repo.split('/')[1];
+    const dir = this.dir ?? this.repo.split('/').pop();
     await download(this.repo, dir, {
       showProgress: !this.silent,
       filters: this.filters,

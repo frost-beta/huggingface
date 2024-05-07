@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env node --no-warnings=ExperimentalWarning
 
 import {Builtins, Cli, Command, Option} from 'clipanion';
 import {download} from './index.js';

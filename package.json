@@ -1,0 +1,36 @@
+{
+  "name": "@frost-beta/huggingface",
+  "version": "0.0.1-dev",
+  "description": "Download model files from HuggingFace",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "huggingface": "dist/bin.js"
+  },
+  "scripts": {
+    "prepack": "tsc"
+  },
+  "author": "zcbenz",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/frost-beta/huggingface.git"
+  },
+  "bugs": {
+    "url": "https://github.com/frost-beta/huggingface/issues"
+  },
+  "devDependencies": {
+    "@types/cli-progress": "3.11.5",
+    "@types/node": "20.12.8",
+    "@types/picomatch": "2.3.3",
+    "typescript": "5.4.5"
+  },
+  "dependencies": {
+    "@huggingface/hub": "0.15.0",
+    "cli-progress": "3.12.0",
+    "clipanion": "4.0.0-rc.3",
+    "picomatch": "4.0.2",
+    "pretty-bytes": "6.1.1"
+  }
+}

@@ -44,7 +44,7 @@ export async function download(repo: string, dir: string, opts: DownloadOptions 
   try {
     process.once('exit', exitListener);
     // Start downloading.
-    const parallel = Math.min(opts.parallel ?? 8, process.stdout.rows);
+    const parallel = Math.min(opts.parallel ?? 8, process.stdout.rows ?? 8);
     return await downloadRepo(repo, dir, parallel, opts.filters, bar);
   } finally {
     process.off('exit', exitListener);

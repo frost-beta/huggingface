@@ -53,7 +53,7 @@ export async function download(repo: string, dir: string, opts: DownloadOptions 
 
 async function downloadRepo(repo: string, dir: string, parallel: number, filters?: string[], bar?: MultiBar) {
   // Create glob filter.
-  const isMatch = filters?.length ? picomatch(filters) : null;
+  const isMatch = filters?.length ? picomatch(filters, {basename: true}) : null;
   // Get files list from hub.
   const files: hub.ListFileEntry[] = [];
   for await (const file of hub.listFiles({repo, recursive: true})) {

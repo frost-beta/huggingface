@@ -10,6 +10,7 @@ import prettyBytes from 'pretty-bytes';
 import * as hub from '@huggingface/hub';
 
 interface DownloadOptions {
+  revision?: string;
   showProgress?: boolean;
   filters?: string[];
   parallel?: number;
@@ -45,19 +46,19 @@ export async function download(repo: string, dir: string, opts: DownloadOptions 
     process.once('exit', exitListener);
     // Start downloading.
     const parallel = Math.min(opts.parallel ?? 8, process.stdout.rows ?? 8);
-    return await downloadRepo(repo, dir, parallel, opts.filters, bar);
+    return await downloadRepo(repo, dir, parallel, opts.filters, opts.revision, bar);
   } finally {
     process.off('exit', exitListener);
   }
 }
 
-async function downloadRepo(repo: string, dir: string, parallel: number, filters?: string[], bar?: MultiBar) {
+async function downloadRepo(repo: string, dir: string, parallel: number, filters?: string[], revision?: string, bar?: MultiBar) {
   // Create glob filter.
   const isMatch = filters?.length ? picomatch(filters, {basename: true}) : null;
   // Get files list from hub.
   const files: hub.ListFileEntry[] = [];
-  for await (const file of hub.listFiles({repo, recursive: true})) {
-    if (!isMatch || isMatch(file.path))
+  for await (const file of hub.listFiles({repo, revision: revision?.replaceAll('/', '%2F'), recursive: true})) {
+    if (file.type == 'file' && (!isMatch || isMatch(file.path)))
       files.push(file);
   }
   if (files.length == 0)
@@ -66,19 +67,19 @@ async function downloadRepo(repo: string, dir: string, parallel: number, filters
   const filepaths = files.sort((a, b) => a.size - b.size).map(f => f.path);
   // Download all files, Throttle.all limits 5 downloads parallel.
   const tasks = alignNames(filepaths).map(([p, n]) => {
-    return () => downloadFile(repo, p, n, dir, parallel, bar);
+    return () => downloadFile(repo, p, n, dir, parallel, revision, bar);
   });
   await Throttle.all(tasks, {maxInProgress: parallel});
   bar?.stop();
 }
 
-async function downloadFile(repo: string, filepath: string, name: string, dir: string, parallel: number, bar?: MultiBar) {
+async function downloadFile(repo: string, filepath: string, name: string, dir: string, parallel: number, revision?: string, bar?: MultiBar) {
   // Make sure target dir is created. Use sync version otherwise the sequence
   // of download will be messed.
   const target = path.join(dir, filepath);
   mkdirSync(path.dirname(target), {recursive: true});
   // Download file.
-  const response = await hub.downloadFile({repo, path: filepath});
+  const response = await hub.downloadFile({repo, revision, path: filepath});
   if (!response) {
     // Only happens for 404 error, should never happen unless server API error.
     return;

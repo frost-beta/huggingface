@@ -27,12 +27,14 @@ export class DownloadCommand extends Command {
 
   repo = Option.String();
   dir = Option.String('--to', {description: 'Target directory to put downloaded files, default is repo\'s name'});
+  revision = Option.String('--revision', {description: 'The revision of the repo'});
   filters = Option.Array('--filter', {description: 'Only download files matching glob patterns'});
   silent = Option.Boolean('--silent', {description: 'Do not print progress bar'});
 
   async execute() {
     const dir = this.dir ?? this.repo.split('/').pop();
     await download(this.repo, dir!, {
+      revision: this.revision,
       showProgress: !this.silent,
       filters: this.filters,
     });

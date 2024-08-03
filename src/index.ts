@@ -1,5 +1,6 @@
+import os from 'node:os';
 import path from 'node:path';
-import {mkdirSync, createWriteStream} from 'node:fs';
+import fs from 'node:fs';
 import {PassThrough} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 
@@ -45,19 +46,27 @@ export async function download(repo: string, dir: string, opts: DownloadOptions 
   try {
     process.once('exit', exitListener);
     // Start downloading.
+    const credentials = getCredentials();
     const parallel = Math.min(opts.parallel ?? 8, process.stdout.rows ?? 8);
-    return await downloadRepo(repo, dir, parallel, opts.filters, opts.revision, bar);
+    return await downloadRepo(repo, dir, parallel, credentials,
+                              opts.filters, opts.revision, bar);
   } finally {
     process.off('exit', exitListener);
   }
 }
 
-async function downloadRepo(repo: string, dir: string, parallel: number, filters?: string[], revision?: string, bar?: MultiBar) {
+async function downloadRepo(repo: string,
+                            dir: string,
+                            parallel: number,
+                            credentials?: hub.Credentials,
+                            filters?: string[],
+                            revision?: string,
+                            bar?: MultiBar) {
   // Create glob filter.
   const isMatch = filters?.length ? picomatch(filters, {basename: true}) : null;
   // Get files list from hub.
   const files: hub.ListFileEntry[] = [];
-  for await (const file of hub.listFiles({repo, revision: revision?.replaceAll('/', '%2F'), recursive: true})) {
+  for await (const file of hub.listFiles({credentials, repo, revision: revision?.replaceAll('/', '%2F'), recursive: true})) {
     if (file.type == 'file' && (!isMatch || isMatch(file.path)))
       files.push(file);
   }
@@ -67,19 +76,26 @@ async function downloadRepo(repo: string, dir: string, parallel: number, filters
   const filepaths = files.sort((a, b) => a.size - b.size).map(f => f.path);
   // Download all files, Throttle.all limits 5 downloads parallel.
   const tasks = alignNames(filepaths).map(([p, n]) => {
-    return () => downloadFile(repo, p, n, dir, parallel, revision, bar);
+    return () => downloadFile(repo, p, n, dir, parallel, credentials, revision, bar);
   });
   await Throttle.all(tasks, {maxInProgress: parallel});
   bar?.stop();
 }
 
-async function downloadFile(repo: string, filepath: string, name: string, dir: string, parallel: number, revision?: string, bar?: MultiBar) {
+async function downloadFile(repo: string,
+                            filepath: string,
+                            name: string,
+                            dir: string,
+                            parallel: number,
+                            credentials?: Credentials,
+                            revision?: string,
+                            bar?: MultiBar) {
   // Make sure target dir is created. Use sync version otherwise the sequence
   // of download will be messed.
   const target = path.join(dir, filepath);
-  mkdirSync(path.dirname(target), {recursive: true});
+  fs.mkdirSync(path.dirname(target), {recursive: true});
   // Download file.
-  const response = await hub.downloadFile({repo, revision, path: filepath});
+  const response = await hub.downloadFile({credentials, repo, revision, path: filepath});
   if (!response) {
     // Only happens for 404 error, should never happen unless server API error.
     return;
@@ -102,7 +118,7 @@ async function downloadFile(repo: string, filepath: string, name: string, dir: s
     progress.on('end', () => subbar.stop());
   }
   // Write to disk and wait.
-  await pipeline(response.body as any, progress, createWriteStream(target));
+  await pipeline(response.body as any, progress, fs.createWriteStream(target));
 }
 
 // Make items in the list have the same length.
@@ -112,4 +128,33 @@ function alignNames(names: string[]): [string, string][] {
   len = Math.min(len, process.stdout.columns - 55);
   // Pad trailing spaces to names.
   return names.map(name => [name, name.padEnd(len, ' ')]);
+}
+
+// Create credentials object.
+function getCredentials(): hub.Credentials | undefined {
+  const accessToken = getAccessToken();
+  if (accessToken)
+    return {accessToken};
+  else
+    return;
+}
+
+// Get the access token.
+function getAccessToken(): string | undefined {
+  if (process.env.HF_TOKEN)
+    return process.env.HF_TOKEN;
+  const cacheDir = process.env.HF_HOME ?? path.join(getHomeDir(), '.cache', 'huggingface');
+  const tokenPath = path.join(cacheDir, 'token');
+  try {
+    return fs.readFileSync(tokenPath);
+  } catch {
+    return undefined;
+  }
+}
+
+// Get the ~ dir.
+function getHomeDir(): string {
+  // Must follow the code at:
+  // https://github.com/huggingface/huggingface_hub/blob/97d5ef603f41314a52eb2d045ec966cf9fed6295/src/huggingface_hub/constants.py#L110
+  return process.env.XDG_CACHE_HOME ?? os.homedir();
 }

@@ -1,7 +1,10 @@
 #!/usr/bin/env node --no-warnings=ExperimentalWarning
 
+import fs from 'node:fs';
+import path from 'node:path';
+import {createInterface} from 'node:readline/promises';
 import {Builtins, Cli, Command, Option} from 'clipanion';
-import {download} from './index.js';
+import {NotLoggedInError, download, whoami, getAccessTokenPath} from './index.js';
 import packageJson from '../package.json' with {type: 'json'};
 
 export class DownloadCommand extends Command {
@@ -41,6 +44,38 @@ export class DownloadCommand extends Command {
   }
 }
 
+export class LoginCommand extends Command {
+  static paths = [ [ 'login' ] ];
+  static usage = Command.Usage({description: 'Set credentials for huggingface.'});
+
+  async execute() {
+    console.log('To login, generate a token from https://huggingface.co/settings/tokens .');
+    const rl = createInterface({input: process.stdin, output: process.stdout});
+    const token = await rl.question('Enter your token: ');
+    const accessTokenPath = getAccessTokenPath();
+    fs.mkdirSync(path.dirname(accessTokenPath), {recursive: true});
+    fs.writeFileSync(accessTokenPath, token);
+  }
+}
+
+export class WhoamiCommand extends Command {
+  static paths = [ [ 'whoami' ] ];
+  static usage = Command.Usage({description: 'Show current user.'});
+
+  async execute() {
+    try {
+      const info = await whoami();
+      console.log(info.name);
+    } catch (error) {
+      if (error instanceof NotLoggedInError)
+        console.log(error.message);
+      else
+        console.error(error);
+      process.exit(1);
+    }
+  }
+}
+
 const cli = new Cli({
   binaryName: `huggingface`,
   binaryLabel: 'HuggingFace CLI',
@@ -50,4 +85,6 @@ const cli = new Cli({
 cli.register(Builtins.HelpCommand);
 cli.register(Builtins.VersionCommand);
 cli.register(DownloadCommand);
+cli.register(LoginCommand);
+cli.register(WhoamiCommand);
 cli.runExit(process.argv.slice(2)).then(() => process.exit());

@@ -10,7 +10,7 @@ import picomatch from 'picomatch';
 import prettyBytes from 'pretty-bytes';
 import * as hub from '@huggingface/hub';
 
-interface DownloadOptions {
+export interface DownloadOptions {
   revision?: string;
   showProgress?: boolean;
   filters?: string[];
@@ -87,7 +87,7 @@ async function downloadFile(repo: string,
                             name: string,
                             dir: string,
                             parallel: number,
-                            credentials?: Credentials,
+                            credentials?: hub.Credentials,
                             revision?: string,
                             bar?: MultiBar) {
   // Make sure target dir is created. Use sync version otherwise the sequence
@@ -121,6 +121,15 @@ async function downloadFile(repo: string,
   await pipeline(response.body as any, progress, fs.createWriteStream(target));
 }
 
+export class NotLoggedInError extends Error {}
+
+export async function whoami(): Promise<hub.WhoAmI> {
+  const credentials = getCredentials();
+  if (!credentials)
+    throw new NotLoggedInError('Not logged in');
+  return await hub.whoAmI({credentials});
+}
+
 // Make items in the list have the same length.
 function alignNames(names: string[]): [string, string][] {
   // Find the longest length.
@@ -131,7 +140,7 @@ function alignNames(names: string[]): [string, string][] {
 }
 
 // Create credentials object.
-function getCredentials(): hub.Credentials | undefined {
+export function getCredentials(): hub.Credentials | undefined {
   const accessToken = getAccessToken();
   if (accessToken)
     return {accessToken};
@@ -140,16 +149,20 @@ function getCredentials(): hub.Credentials | undefined {
 }
 
 // Get the access token.
-function getAccessToken(): string | undefined {
+export function getAccessToken(): string | undefined {
   if (process.env.HF_TOKEN)
     return process.env.HF_TOKEN;
-  const cacheDir = process.env.HF_HOME ?? path.join(getHomeDir(), '.cache', 'huggingface');
-  const tokenPath = path.join(cacheDir, 'token');
   try {
-    return fs.readFileSync(tokenPath);
+    return fs.readFileSync(getAccessTokenPath()).toString();
   } catch {
     return undefined;
   }
+}
+
+// Get the path to access token file.
+export function getAccessTokenPath(): string {
+  const cacheDir = process.env.HF_HOME ?? path.join(getHomeDir(), '.cache', 'huggingface');
+  return path.join(cacheDir, 'token');
 }
 
 // Get the ~ dir.

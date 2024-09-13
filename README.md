@@ -30,7 +30,7 @@ the `-h,--help` flag right after the command name.
 ### APIs
 
 ```ts
-import * as hub from '@huggingface/hub';
+import * as hub from '@frost-beta/huggingface';
 
 export interface DownloadOptions {
     revision?: string;

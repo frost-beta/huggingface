@@ -5,9 +5,9 @@ import {PassThrough} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 
 import {MultiBar, Presets, SingleBar} from 'cli-progress';
-import Throttle from 'promise-parallel-throttle';
 import picomatch from 'picomatch';
 import prettyBytes from 'pretty-bytes';
+import * as queue from '@henrygd/queue';
 import * as hub from '@huggingface/hub';
 
 export interface DownloadOptions {
@@ -74,11 +74,12 @@ async function downloadRepo(repo: string,
     return;
   // Sort the files by size and then get paths.
   const filepaths = files.sort((a, b) => a.size - b.size).map(f => f.path);
-  // Download all files, Throttle.all limits 5 downloads parallel.
-  const tasks = alignNames(filepaths).map(([p, n]) => {
-    return () => downloadFile(repo, p, n, dir, parallel, credentials, revision, bar);
-  });
-  await Throttle.all(tasks, {maxInProgress: parallel});
+  // Download all files in parallel.
+  const tasks = queue.newQueue(5);
+  for (const [ filepath, name ] of alignNames(filepaths)) {
+    tasks.add(() => downloadFile(repo, filepath, name, dir, parallel, credentials, revision, bar));
+  }
+  await tasks.done();
   bar?.stop();
 }
 

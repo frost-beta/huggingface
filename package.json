@@ -28,11 +28,11 @@
     "typescript": "5.4.5"
   },
   "dependencies": {
+    "@henrygd/queue": "1.0.6",
     "@huggingface/hub": "0.15.0",
     "cli-progress": "3.12.0",
     "clipanion": "4.0.0-rc.3",
     "picomatch": "4.0.2",
-    "pretty-bytes": "6.1.1",
-    "promise-parallel-throttle": "3.4.1"
+    "pretty-bytes": "6.1.1"
   }
 }

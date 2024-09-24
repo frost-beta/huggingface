@@ -153,6 +153,9 @@ function createSingleBar(bar: Bar, name: string, total: number, parallel: number
   const subbars = (bar as any).items as BarItem[];
   let progress: Progress;
   if (subbars.length < parallel) {
+    let lastUpdate = Date.now() - 1000;
+    let lastEta = 'Waiting';
+    // Create progress bar and add it to group.
     progress = new Progress({total});
     progress.set(0, {name});
     bar.add(new BarItem(progress, {
@@ -162,9 +165,18 @@ function createSingleBar(bar: Bar, name: string, total: number, parallel: number
       template: ({bar, value, total, etaHumanReadable}) => {
         const valueNumber = parseInt(value);
         const totalNumber = parseInt(total);
-        const name = (progress.getPayload() as any).name as string;
         const isFinished = valueNumber >= totalNumber;
+        // Do not refresh eta too often.
+        if (valueNumber == 0 || Date.now() - lastUpdate < 2000) {
+          etaHumanReadable = lastEta;
+        } else {
+          lastUpdate = Date.now();
+          lastEta = String(etaHumanReadable);
+        }
         const eta = isFinished ? '' : ` | ETA: ${etaHumanReadable}`;
+        // The name may change, get it from payload.
+        const name = (progress.getPayload() as any).name as string;
+        // Print pretty size.
         const bytesOptions = {
           // Avoid jumping cursors around numbers like 1.9MB and 2MB.
           minimumFractionDigits: valueNumber > 1024 * 1024 ? 1 : 0,

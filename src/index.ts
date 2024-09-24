@@ -1,10 +1,10 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import fs from 'node:fs';
 import {PassThrough} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 
-import {MultiBar, Presets, SingleBar} from 'cli-progress';
+import {Bar, BarItem, Progress, presets} from 'ku-progress-bar';
 import picomatch from 'picomatch';
 import prettyBytes from 'pretty-bytes';
 import * as queue from '@henrygd/queue';
@@ -19,40 +19,15 @@ export interface DownloadOptions {
 
 export async function download(repo: string, dir: string, opts: DownloadOptions = {}) {
   // Create progress bar.
-  let bar: MultiBar | undefined = undefined;
+  let bar: Bar | undefined;
   if (opts.showProgress) {
-    bar = new MultiBar({
-      barsize: 30,
-      hideCursor: true,
-      gracefulExit: false,  // not reliable, use our own listener below
-      format: '{bar} | {name} | {value}/{total}',
-      formatValue: (value, _, type) => {
-        // Return human friendly file sizes.
-        if (type != 'value' && type != 'total')
-          return String(value);
-        const options = {
-          // Avoid jumping cursors around numbers like 1.9MB and 2MB.
-          minimumFractionDigits: value > 1024 * 1024 ? 1 : 0,
-          // Keep numbers compact.
-          maximumFractionDigits: 1,
-          space: false,
-        };
-        return prettyBytes(value, options);
-      },
-    }, Presets.shades_grey);
+    bar = new Bar(undefined, {refreshTimeMs: 100});
   }
-  // Stop the bar when process quits to restore the cursor.
-  const exitListener = () => bar?.stop();
-  try {
-    process.once('exit', exitListener);
-    // Start downloading.
-    const credentials = getCredentials();
-    const parallel = Math.min(opts.parallel ?? 8, process.stdout.rows ?? 8);
-    return await downloadRepo(repo, dir, parallel, credentials,
-                              opts.filters, opts.revision, bar);
-  } finally {
-    process.off('exit', exitListener);
-  }
+  // Start downloading.
+  const credentials = getCredentials();
+  const parallel = Math.min(opts.parallel ?? 8, process.stdout.rows ?? 8);
+  return await downloadRepo(repo, dir, parallel, credentials,
+                            opts.filters, opts.revision, bar);
 }
 
 async function downloadRepo(repo: string,
@@ -61,7 +36,7 @@ async function downloadRepo(repo: string,
                             credentials?: hub.Credentials,
                             filters?: string[],
                             revision?: string,
-                            bar?: MultiBar) {
+                            bar?: Bar) {
   // Create glob filter.
   const isMatch = filters?.length ? picomatch(filters, {basename: true}) : null;
   // Get files list from hub.
@@ -75,7 +50,7 @@ async function downloadRepo(repo: string,
   // Sort the files by size and then get paths.
   const filepaths = files.sort((a, b) => a.size - b.size).map(f => f.path);
   // Download all files in parallel.
-  const tasks = queue.newQueue(5);
+  const tasks = queue.newQueue(parallel);
   for (const [ filepath, name ] of alignNames(filepaths)) {
     tasks.add(() => downloadFile(repo, filepath, name, dir, parallel, credentials, revision, bar));
   }
@@ -90,7 +65,7 @@ async function downloadFile(repo: string,
                             parallel: number,
                             credentials?: hub.Credentials,
                             revision?: string,
-                            bar?: MultiBar) {
+                            bar?: Bar) {
   // Make sure target dir is created. Use sync version otherwise the sequence
   // of download will be messed.
   const target = path.join(dir, filepath);
@@ -104,19 +79,14 @@ async function downloadFile(repo: string,
   // Setup progress bar.
   const progress = new PassThrough();
   if (bar) {
-    const size = parseInt(response.headers.get('Content-Length')!);
-    let subbar: SingleBar;
-    let bars = (bar as any).bars as SingleBar[];
-    if (bars.length < parallel) {
-      subbar = bar.create(size, 0);
-    } else {
-      // Reuse finished bar, otherwise things will break when the number of bars
-      // exceeds the screen height.
-      subbar = bars.findLast(b => !(b as any).isActive)!;
-      subbar.start(size, 0);
-    }
-    progress.on('data', (chunk) => subbar.increment(chunk.length, {name}));
-    progress.on('end', () => subbar.stop());
+    const total = parseInt(response.headers.get('Content-Length')!);
+    const subbar = createSingleBar(bar, name, total, parallel);
+    progress.on('data', (chunk) => subbar.increment(chunk.length));
+    progress.on('end', () => {
+      subbar.set(total, {name});
+      // Without this the last update may not show on exit.
+      bar.render();
+    });
   }
   // Write to disk and wait.
   await pipeline(response.body as any, progress, fs.createWriteStream(target));
@@ -162,8 +132,13 @@ export function getAccessToken(): string | undefined {
 
 // Get the path to access token file.
 export function getAccessTokenPath(): string {
-  const cacheDir = process.env.HF_HOME ?? path.join(getHomeDir(), '.cache', 'huggingface');
-  return path.join(cacheDir, 'token');
+  const cacheDir = process.env.HF_HOME ?? `${getHomeDir()}/.cache/huggingface`;
+  return `${cacheDir}/token`;
+}
+
+// require('../package.json')
+export function getPackageJson(): {version: string} {
+  return JSON.parse(String(fs.readFileSync(`${__dirname}/../package.json`)));
 }
 
 // Get the ~ dir.
@@ -171,4 +146,50 @@ function getHomeDir(): string {
   // Must follow the code at:
   // https://github.com/huggingface/huggingface_hub/blob/97d5ef603f41314a52eb2d045ec966cf9fed6295/src/huggingface_hub/constants.py#L110
   return process.env.XDG_CACHE_HOME ?? os.homedir();
+}
+
+// Create a single progress bar.
+function createSingleBar(bar: Bar, name: string, total: number, parallel: number) {
+  const subbars = (bar as any).items as BarItem[];
+  let progress: Progress;
+  if (subbars.length < parallel) {
+    progress = new Progress({total});
+    progress.set(0, {name});
+    bar.add(new BarItem(progress, {
+      options: Object.assign(presets.shades, {
+        width: 15,
+      }),
+      template: ({bar, value, total, etaHumanReadable}) => {
+        const valueNumber = parseInt(value);
+        const totalNumber = parseInt(total);
+        const name = (progress.getPayload() as any).name as string;
+        const isFinished = valueNumber >= totalNumber;
+        const eta = isFinished ? '' : ` | ETA: ${etaHumanReadable}`;
+        const bytesOptions = {
+          // Avoid jumping cursors around numbers like 1.9MB and 2MB.
+          minimumFractionDigits: valueNumber > 1024 * 1024 ? 1 : 0,
+          // Keep numbers compact.
+          maximumFractionDigits: 1,
+          space: false,
+        };
+        value = prettyBytes(valueNumber, bytesOptions);
+        total = prettyBytes(totalNumber, bytesOptions);
+        const percent = isFinished ? total : `${value}/${total}`;
+        return `${bar} | ${name} | ${percent}${eta}`;
+      },
+    }));
+  } else {
+    // Reuse finished bar, otherwise things will break when the number of bars
+    // exceeds the screen height.
+    progress = subbars.findLast(b => {
+      const p = b.getProgresses()[0];
+      return p.getValue() >= p.getTotal();
+    })!.getProgresses()[0] as Progress;
+    progress.setTotal(total);
+    progress.set(0, {name});
+  }
+  // Start after a subbar is ready so there is no jumping new line.
+  if (!(bar as any).isStarted)
+    bar.start();
+  return progress;
 }

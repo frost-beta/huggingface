@@ -4,8 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createInterface} from 'node:readline/promises';
 import {Builtins, Cli, Command, Option} from 'clipanion';
-import {NotLoggedInError, download, whoami, getAccessTokenPath} from './index.js';
-import packageJson from '../package.json' with {type: 'json'};
+import {NotLoggedInError, download, whoami, getAccessTokenPath, getPackageJson} from './index.js';
 
 export class DownloadCommand extends Command {
   static paths = [ [ 'download' ] ];
@@ -79,7 +78,7 @@ export class WhoamiCommand extends Command {
 const cli = new Cli({
   binaryName: `huggingface`,
   binaryLabel: 'HuggingFace CLI',
-  binaryVersion: packageJson.version,
+  binaryVersion: getPackageJson().version,
 });
 
 cli.register(Builtins.HelpCommand);

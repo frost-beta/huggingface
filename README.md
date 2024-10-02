@@ -14,7 +14,7 @@ $ huggingface
 
 ━━━ General commands ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  huggingface download [--to #0] [--filter #0] [--silent] <repo>
+  huggingface download [--to #0] [--filter #0] [--hf] [--silent] <repo>
     Download models or datasets from repository.
 
   huggingface login

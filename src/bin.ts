@@ -31,10 +31,13 @@ export class DownloadCommand extends Command {
   dir = Option.String('--to', {description: 'Target directory to put downloaded files, default is repo\'s name'});
   revision = Option.String('--revision', {description: 'The revision of the repo'});
   filters = Option.Array('--filter', {description: 'Only download files matching glob patterns'});
+  hf = Option.Boolean('--hf', {description: 'Only download hf format model files (*.safetensors, *.json, *.txt)'});
   silent = Option.Boolean('--silent', {description: 'Do not print progress bar'});
 
   async execute() {
     const dir = this.dir ?? this.repo.split('/').pop();
+    if (!this.respo.startsWith('datasets') && this.hf)
+      this.filters = [ '*.safetensors', '*.json', '*.txt' ];
     await download(this.repo, dir!, {
       revision: this.revision,
       showProgress: !this.silent,

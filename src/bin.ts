@@ -4,7 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createInterface} from 'node:readline/promises';
 import {Builtins, Cli, Command, Option} from 'clipanion';
-import {NotLoggedInError, download, whoami, getAccessTokenPath, getPackageJson} from './index.js';
+import {
+  NotLoggedInError,
+  download,
+  whoami,
+  savePretrainedTokenizer,
+  getAccessTokenPath,
+  getPackageJson,
+} from './index.js';
 
 export class DownloadCommand extends Command {
   static paths = [ [ 'download' ] ];
@@ -32,17 +39,20 @@ export class DownloadCommand extends Command {
   revision = Option.String('--revision', {description: 'The revision of the repo'});
   filters = Option.Array('--filter', {description: 'Only download files matching glob patterns'});
   hf = Option.Boolean('--hf', {description: 'Only download hf format model files (*.safetensors, *.json, *.txt)'});
+  fixTokenizer = Option.Boolean('--fix-tokenizer', {description: 'Generate tokenizer.json if the model does not provide one'});
   silent = Option.Boolean('--silent', {description: 'Do not print progress bar'});
 
   async execute() {
-    const dir = this.dir ?? this.repo.split('/').pop();
-    if (!this.respo.startsWith('datasets') && this.hf)
+    const dir = this.dir ?? this.repo.split('/').pop()!;
+    if (!this.repo.startsWith('datasets') && this.hf)
       this.filters = [ '*.safetensors', '*.json', '*.txt' ];
-    await download(this.repo, dir!, {
+    await download(this.repo, dir, {
       revision: this.revision,
       showProgress: !this.silent,
       filters: this.filters,
     });
+    if (this.fixTokenizer && !fs.existsSync(`${dir}/tokenizer.json`))
+      savePretrainedTokenizer(dir);
   }
 }
 

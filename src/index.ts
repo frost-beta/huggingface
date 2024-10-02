@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {PassThrough} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
+import {execFileSync} from 'node:child_process';
 
 import {Bar, BarItem, Progress, presets} from 'ku-progress-bar';
 import picomatch from 'picomatch';
@@ -99,6 +100,18 @@ export async function whoami(): Promise<hub.WhoAmI> {
   if (!credentials)
     throw new NotLoggedInError('Not logged in');
   return await hub.whoAmI({credentials});
+}
+
+export function savePretrainedTokenizer(dir: string) {
+  const script = path.resolve(`${__dirname}/../vocab_to_tokenizer_json.py`);
+  try {
+    execFileSync(script, [dir], {stdio: 'pipe'});
+  } catch (error) {
+    if (error.stderr?.toString().includes("ModuleNotFoundError: No module named 'transformers'"))
+      throw new Error('You must have the "Transformers" python package installed to save tokenizer');
+    else
+      throw error;
+  }
 }
 
 // Make items in the list have the same length.

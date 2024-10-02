@@ -106,7 +106,7 @@ export function savePretrainedTokenizer(dir: string) {
   const script = path.resolve(`${__dirname}/../vocab_to_tokenizer_json.py`);
   try {
     execFileSync(script, [dir], {stdio: 'pipe'});
-  } catch (error) {
+  } catch (error: any) {
     if (error.stderr?.toString().includes("ModuleNotFoundError: No module named 'transformers'"))
       throw new Error('You must have the "Transformers" python package installed to save tokenizer');
     else

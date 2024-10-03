@@ -8,7 +8,7 @@ import {
   NotLoggedInError,
   download,
   whoami,
-  savePretrainedTokenizer,
+  fixTokenizer,
   getAccessTokenPath,
   getPackageJson,
 } from './index.js';
@@ -39,7 +39,7 @@ export class DownloadCommand extends Command {
   revision = Option.String('--revision', {description: 'The revision of the repo'});
   filters = Option.Array('--filter', {description: 'Only download files matching glob patterns'});
   hf = Option.Boolean('--hf', {description: 'Only download hf format model files (*.safetensors, *.json, *.txt)'});
-  fixTokenizer = Option.Boolean('--fix-tokenizer', {description: 'Generate tokenizer.json if the model does not provide one'});
+  fixTokenizer = Option.Boolean('--fix-tokenizer', {description: 'Fix malformed tokenizer provided by the model'});
   silent = Option.Boolean('--silent', {description: 'Do not print progress bar'});
 
   async execute() {
@@ -51,8 +51,8 @@ export class DownloadCommand extends Command {
       showProgress: !this.silent,
       filters: this.filters,
     });
-    if (this.fixTokenizer && !fs.existsSync(`${dir}/tokenizer.json`))
-      savePretrainedTokenizer(dir);
+    if (this.fixTokenizer)
+      fixTokenizer(dir);
   }
 }
 

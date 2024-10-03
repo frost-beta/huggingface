@@ -102,8 +102,8 @@ export async function whoami(): Promise<hub.WhoAmI> {
   return await hub.whoAmI({credentials});
 }
 
-export function savePretrainedTokenizer(dir: string) {
-  const script = path.resolve(`${__dirname}/../vocab_to_tokenizer_json.py`);
+export function fixTokenizer(dir: string) {
+  const script = path.resolve(`${__dirname}/../re-export-tokenizer-json.py`);
   try {
     execFileSync(script, [dir], {stdio: 'pipe'});
   } catch (error: any) {
